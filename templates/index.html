@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>图像频域水印生成</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="workspace">
+      <form class="panel controls" method="post" enctype="multipart/form-data">
+        <div class="field">
+          <label for="cover">载体图片</label>
+          <input id="cover" name="cover" type="file" accept="image/*" required>
+        </div>
+
+        <div class="field">
+          <label for="watermark">水印图片</label>
+          <input id="watermark" name="watermark" type="file" accept="image/*" required>
+        </div>
+
+        <div class="field">
+          <label for="alpha">嵌入强度</label>
+          <div class="range-row">
+            <input id="alpha" name="alpha" type="range" min="0.01" max="0.20" step="0.01" value="{{ alpha }}">
+            <output id="alphaValue">{{ "%.2f"|format(alpha) }}</output>
+          </div>
+        </div>
+
+        <button class="primary" type="submit">生成含水印图片</button>
+
+        {% if error %}
+          <p class="error">{{ error }}</p>
+        {% endif %}
+      </form>
+
+      <section class="panel result-panel">
+        {% if result %}
+          <div class="result-head">
+            <div>
+              <h1>生成结果</h1>
+              <p>PSNR {{ psnr }} dB · SSIM {{ ssim }} · 水印尺寸 {{ watermark_size }}</p>
+            </div>
+            <a class="download" href="{{ url_for('download', filename=download_name) }}">下载 PNG</a>
+          </div>
+
+          <div class="preview-grid">
+            <figure>
+              <img src="{{ cover_preview }}" alt="载体图片预览">
+              <figcaption>载体图片</figcaption>
+            </figure>
+            <figure>
+              <img src="{{ watermark_preview }}" alt="水印图片预览">
+              <figcaption>二值化水印</figcaption>
+            </figure>
+            <figure class="wide">
+              <img src="{{ result_preview }}" alt="含水印图片预览">
+              <figcaption>含水印图片</figcaption>
+            </figure>
+          </div>
+        {% else %}
+          <div class="empty">
+            <h1>图像频域水印生成</h1>
+            <p>上传载体图和水印图后，系统会用 DFT 频域嵌入算法生成含水印图片。</p>
+          </div>
+        {% endif %}
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const alpha = document.getElementById("alpha");
+    const alphaValue = document.getElementById("alphaValue");
+    alpha.addEventListener("input", () => {
+      alphaValue.textContent = Number(alpha.value).toFixed(2);
+    });
+  </script>
+</body>
+</html>
