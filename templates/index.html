@@ -21,6 +21,16 @@
         </div>
 
         <div class="field">
+          <label for="method">水印算法</label>
+          <select id="method" name="method">
+            {% for value, label in methods.items() %}
+              <option value="{{ value }}" {% if method == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="hint" id="methodHint"></p>
+        </div>
+
+        <div class="field">
           <label for="alpha">嵌入强度</label>
           <div class="range-row">
             <input id="alpha" name="alpha" type="range" min="0.01" max="0.20" step="0.01" value="{{ alpha }}">
@@ -44,7 +54,7 @@
           <div class="result-head">
             <div>
               <h1>生成结果</h1>
-              <p>PSNR {{ psnr }} dB · SSIM {{ ssim }} · 水印尺寸 {{ watermark_size }}</p>
+              <p>{{ method_name }} · PSNR {{ psnr }} dB · SSIM {{ ssim }} · 水印尺寸 {{ watermark_size }}</p>
             </div>
             <a class="download" href="{{ url_for('download', filename=download_name) }}">下载 PNG</a>
           </div>
@@ -66,7 +76,7 @@
         {% else %}
           <div class="empty">
             <h1>图像频域水印生成</h1>
-            <p>上传载体图和水印图后，系统会用 DFT 频域嵌入算法生成含水印图片。</p>
+            <p>上传载体图和水印图，选择 DFT、DCT 或 DWT 算法，生成含水印图片。</p>
           </div>
         {% endif %}
       </section>
@@ -76,9 +86,21 @@
   <script>
     const alpha = document.getElementById("alpha");
     const alphaValue = document.getElementById("alphaValue");
+    const method = document.getElementById("method");
+    const methodHint = document.getElementById("methodHint");
+    const hints = {
+      dft: "在频谱对称区域嵌入水印，适合作为默认方案。",
+      dct: "在 8 x 8 图像块的中频系数中进行 QIM 量化嵌入。",
+      dwt: "在 Haar 小波细节分量中嵌入水印，修改集中在纹理区域。"
+    };
     alpha.addEventListener("input", () => {
       alphaValue.textContent = Number(alpha.value).toFixed(2);
     });
+    function updateMethodHint() {
+      methodHint.textContent = hints[method.value];
+    }
+    method.addEventListener("change", updateMethodHint);
+    updateMethodHint();
   </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 # 图像频域数字水印
 
-本项目是“信号与系统”课程大作业，实现了基于 DFT（离散傅里叶变换）的图像频域水印嵌入，并提供可双击运行的桌面程序、网页界面和完整实验脚本。
+本项目是“信号与系统”课程大作业，实现了多种图像频域水印嵌入方案，并提供可双击运行的桌面程序、网页界面和完整实验脚本。
 
 桌面程序适合直接生成含水印图片。实验脚本用于分析水印质量、鲁棒性，并对比 DFT、DCT 和 DWT 水印方案。
 
@@ -10,7 +10,7 @@
 
 - 上传载体图片和水印图片。
 - 自动将水印缩放并二值化。
-- 使用 DFT 频域算法嵌入水印。
+- 选择 DFT、DCT QIM 或 Haar DWT 算法嵌入水印。
 - 调整嵌入强度 `alpha`。
 - 展示含水印图片、PSNR 和 SSIM。
 - 下载生成的 PNG 图片。
@@ -34,7 +34,7 @@
 dist/图像频域水印.app
 ```
 
-双击应用后，系统会自动打开浏览器页面。上传载体图片和水印图片，调整嵌入强度，然后点击“生成含水印图片”。
+双击应用后，系统会自动打开浏览器页面。上传载体图片和水印图片，选择算法，调整嵌入强度，然后点击“生成含水印图片”。
 
 使用结束后，点击页面左侧的“退出应用”。
 
@@ -117,6 +117,14 @@ python3 dft_image_processor_show_dwt_fixed.py
 
 ## 算法说明
 
+### 应用内置算法
+
+| 算法 | 应用中的名称 | 说明 |
+| --- | --- | --- |
+| DFT | `DFT 频域嵌入` | 在傅里叶频谱的对称区域嵌入水印，是默认方案。 |
+| DCT QIM | `DCT QIM 分块嵌入` | 将图像划分为 `8 x 8` 块，在中频系数中进行量化索引调制。 |
+| Haar DWT | `Haar DWT 小波嵌入` | 在 Haar 小波变换的细节分量中嵌入水印。 |
+
 ### DFT 水印嵌入
 
 桌面程序对 RGB 三个通道分别执行二维 DFT，并通过 `fftshift` 将低频区域移动到频谱中心。水印经过灰度化、缩放和二值化后，转换为 `-1` 和 `1` 的矩阵。
@@ -137,6 +145,45 @@ python3 dft_image_processor_show_dwt_fixed.py
 | NC | 归一化相关系数，用于衡量提取水印与原始水印的相似程度。越接近 `1` 越好。 |
 
 桌面端显示 PSNR 和 SSIM。完整实验脚本还会在提取水印后计算 NC。
+
+## 在应用中新增算法
+
+网页端通过 `app.py` 中的统一入口调用不同算法。新增算法时，通常只需要修改后端注册表、嵌入函数和页面说明。
+
+1. 在 `app.py` 的 `METHODS` 中注册方法名称：
+
+```python
+METHODS = {
+    "dft": "DFT 频域嵌入",
+    "dct": "DCT QIM 分块嵌入",
+    "dwt": "Haar DWT 小波嵌入",
+    "new_method": "新水印算法",
+}
+```
+
+2. 实现统一形式的嵌入函数。输入图片和返回图片都应为 `0` 到 `1` 范围内的 RGB NumPy 数组：
+
+```python
+def new_method_embed(
+    cover: np.ndarray,
+    wm_bin: np.ndarray,
+    wm_pm1: np.ndarray,
+    alpha: float,
+) -> np.ndarray:
+    ...
+    return watermarked
+```
+
+3. 在 `embed_watermark()` 中添加分发逻辑：
+
+```python
+if method == "new_method":
+    return new_method_embed(cover, wm_bin, wm_pm1, alpha)
+```
+
+4. 在 `templates/index.html` 的 `hints` 中补充页面提示文本。
+
+如果新方法需要额外第三方库，还要将依赖加入 `requirements-web.txt`，并重新执行 `python3 build_desktop.py`。桌面端优先使用 NumPy 和 Pillow 实现，以控制可执行程序体积。
 
 ## 实验输出
 
@@ -201,4 +248,3 @@ DFT_QIM_DELTA = 50.0
 - 完整实验中的 DFT 提取属于非盲提取，需要原始载体图片。
 - Windows 用户需要在 Windows 环境下重新执行打包脚本，才能获得 `.exe` 文件。
 - macOS 首次打开未经过 Apple 公证的本地应用时，系统可能要求在“系统设置 > 隐私与安全性”中确认打开。
-

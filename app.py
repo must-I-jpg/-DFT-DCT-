@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Web interface for DFT image watermark embedding.
-
-Run:
-    python app.py
-Then open:
-    http://127.0.0.1:5000
-"""
+"""Desktop web interface for frequency-domain image watermark embedding."""
 
 from __future__ import annotations
 
@@ -29,6 +22,13 @@ ROOT = Path(__file__).resolve().parent
 OUTPUT_DIR = Path.home() / ".frequency_watermark" / "web_outputs"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "webp"}
 DEFAULT_ALPHA = 0.05
+DCT_SIZE = 8
+DCT_POSITIONS = ((3, 3), (3, 4), (4, 3), (4, 4))
+METHODS = {
+    "dft": "DFT 频域嵌入",
+    "dct": "DCT QIM 分块嵌入",
+    "dwt": "Haar DWT 小波嵌入",
+}
 SERVER: BaseWSGIServer | None = None
 
 app = Flask(__name__)
@@ -109,10 +109,105 @@ def dft_embed_channel(
     return np.clip(embedded, 0, 1)
 
 
-def embed_watermark(cover: np.ndarray, wm_pm1: np.ndarray, alpha: float) -> np.ndarray:
+def dft_embed(cover: np.ndarray, wm_pm1: np.ndarray, alpha: float) -> np.ndarray:
     pos = dft_embed_position(cover.shape, wm_pm1.shape)
     channels = [dft_embed_channel(cover[:, :, index], wm_pm1, pos, alpha) for index in range(3)]
     return np.stack(channels, axis=2)
+
+
+def luminance(image: np.ndarray) -> np.ndarray:
+    return image[:, :, 0] * 0.299 + image[:, :, 1] * 0.587 + image[:, :, 2] * 0.114
+
+
+def apply_luminance(image: np.ndarray, original: np.ndarray, modified: np.ndarray) -> np.ndarray:
+    return np.clip(image + (modified - original)[:, :, np.newaxis], 0, 1)
+
+
+def dct_matrix(size: int = DCT_SIZE) -> np.ndarray:
+    positions = np.arange(size)
+    matrix = np.cos(np.pi * (2 * positions[np.newaxis, :] + 1) * positions[:, np.newaxis] / (2 * size))
+    matrix[0] *= 1 / np.sqrt(size)
+    matrix[1:] *= np.sqrt(2 / size)
+    return matrix
+
+
+DCT_MATRIX = dct_matrix()
+
+
+def dct_embed(cover: np.ndarray, wm_bin: np.ndarray, alpha: float) -> np.ndarray:
+    source = luminance(cover)
+    work = source * 255
+    bits = (wm_bin.ravel() > 0).astype(np.uint8)
+    capacity = (source.shape[0] // DCT_SIZE) * (source.shape[1] // DCT_SIZE) * len(DCT_POSITIONS)
+    if bits.size > capacity:
+        raise ValueError("载体图片过小，无法容纳当前 DCT 水印。")
+
+    delta = max(4.0, alpha * 720)
+    index = 0
+    for y in range(0, source.shape[0] - DCT_SIZE + 1, DCT_SIZE):
+        for x in range(0, source.shape[1] - DCT_SIZE + 1, DCT_SIZE):
+            block = work[y:y + DCT_SIZE, x:x + DCT_SIZE]
+            coeff = DCT_MATRIX @ block @ DCT_MATRIX.T
+            for row, column in DCT_POSITIONS:
+                if index >= bits.size:
+                    break
+                quantized = int(np.floor(coeff[row, column] / delta + 0.5))
+                if quantized % 2 != int(bits[index]):
+                    quantized += 1
+                coeff[row, column] = quantized * delta
+                index += 1
+            work[y:y + DCT_SIZE, x:x + DCT_SIZE] = DCT_MATRIX.T @ coeff @ DCT_MATRIX
+            if index >= bits.size:
+                return apply_luminance(cover, source, np.clip(work / 255, 0, 1))
+    return apply_luminance(cover, source, np.clip(work / 255, 0, 1))
+
+
+def haar_dwt2(channel: np.ndarray) -> tuple[np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    if channel.shape[0] % 2 or channel.shape[1] % 2:
+        channel = np.pad(channel, ((0, channel.shape[0] % 2), (0, channel.shape[1] % 2)), mode="edge")
+    a, b = channel[0::2, 0::2], channel[0::2, 1::2]
+    c, d = channel[1::2, 0::2], channel[1::2, 1::2]
+    return (a + b + c + d) / 2, ((a - b + c - d) / 2, (a + b - c - d) / 2, (a - b - c + d) / 2)
+
+
+def haar_idwt2(
+    ll: np.ndarray,
+    detail: tuple[np.ndarray, np.ndarray, np.ndarray],
+    shape: tuple[int, int],
+) -> np.ndarray:
+    lh, hl, hh = detail
+    result = np.zeros((ll.shape[0] * 2, ll.shape[1] * 2))
+    result[0::2, 0::2] = (ll + lh + hl + hh) / 2
+    result[0::2, 1::2] = (ll - lh + hl - hh) / 2
+    result[1::2, 0::2] = (ll + lh - hl - hh) / 2
+    result[1::2, 1::2] = (ll - lh - hl + hh) / 2
+    return result[:shape[0], :shape[1]]
+
+
+def resize_pm1(wm_pm1: np.ndarray, width: int, height: int) -> np.ndarray:
+    watermark = Image.fromarray(np.where(wm_pm1 > 0, 255, 0).astype(np.uint8), mode="L")
+    resized = watermark.resize((width, height), Image.Resampling.NEAREST)
+    return np.where(np.asarray(resized) > 0, 1.0, -1.0)
+
+
+def dwt_embed(cover: np.ndarray, wm_pm1: np.ndarray, alpha: float) -> np.ndarray:
+    source = luminance(cover)
+    ll, (lh, hl, hh) = haar_dwt2(source)
+    watermark = resize_pm1(wm_pm1, lh.shape[1], lh.shape[0])
+    lh_watermarked = lh + alpha * (np.std(lh) + 1e-8) * watermark
+    hl_watermarked = hl + alpha * (np.std(hl) + 1e-8) * watermark
+    modified = np.clip(haar_idwt2(ll, (lh_watermarked, hl_watermarked, hh), source.shape), 0, 1)
+    return apply_luminance(cover, source, modified)
+
+
+def embed_watermark(method: str, cover: np.ndarray, wm_bin: np.ndarray, wm_pm1: np.ndarray, alpha: float) -> np.ndarray:
+    if method == "dft":
+        return dft_embed(cover, wm_pm1, alpha)
+    if method == "dct":
+        return dct_embed(cover, wm_bin, alpha)
+    if method == "dwt":
+        return dwt_embed(cover, wm_pm1, alpha)
+    raise ValueError("未知的水印算法。")
 
 
 def to_uint8(image: np.ndarray) -> np.ndarray:
@@ -154,13 +249,14 @@ def quality_metrics(cover: np.ndarray, watermarked: np.ndarray) -> tuple[float, 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    context = {"alpha": DEFAULT_ALPHA}
+    context = {"alpha": DEFAULT_ALPHA, "method": "dft", "methods": METHODS}
 
     if request.method == "POST":
         cover_file = request.files.get("cover")
         watermark_file = request.files.get("watermark")
         alpha = float(request.form.get("alpha", DEFAULT_ALPHA))
-        context["alpha"] = alpha
+        method = request.form.get("method", "dft")
+        context.update(alpha=alpha, method=method)
 
         if not cover_file or not watermark_file or cover_file.filename == "" or watermark_file.filename == "":
             context["error"] = "请同时上传载体图片和水印图片。"
@@ -168,12 +264,15 @@ def index():
         if not allowed_file(cover_file.filename) or not allowed_file(watermark_file.filename):
             context["error"] = "仅支持 PNG、JPG、JPEG、BMP、WEBP 格式。"
             return render_template("index.html", **context), 400
+        if method not in METHODS:
+            context["error"] = "请选择有效的水印算法。"
+            return render_template("index.html", **context), 400
 
         try:
             cover = read_cover(cover_file)
             watermark = read_watermark(watermark_file)
             wm_bin, wm_pm1 = prepare_watermark(watermark, cover.shape)
-            watermarked = embed_watermark(cover, wm_pm1, alpha)
+            watermarked = embed_watermark(method, cover, wm_bin, wm_pm1, alpha)
             psnr_value, ssim_value = quality_metrics(cover, watermarked)
 
             output_name = f"watermarked_{uuid.uuid4().hex}.png"
@@ -188,6 +287,7 @@ def index():
                 psnr=f"{psnr_value:.2f}",
                 ssim=f"{ssim_value:.4f}",
                 watermark_size=f"{wm_bin.shape[1]} x {wm_bin.shape[0]}",
+                method_name=METHODS[method],
             )
         except Exception as exc:
             context["error"] = f"处理失败：{exc}"

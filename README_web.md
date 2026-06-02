@@ -1,6 +1,6 @@
 # 图像水印网页端
 
-这个网页端基于项目里的 DFT 频域水印思路：用户上传载体图片和水印图片，后端自动二值化水印并生成含水印图片。
+这个网页端支持 DFT、DCT QIM 和 Haar DWT 水印嵌入：用户上传载体图片和水印图片，选择算法后，后端自动二值化水印并生成含水印图片。
 
 ## 开发模式启动
 
@@ -36,7 +36,7 @@ PyInstaller 只能为当前操作系统打包，不能在 macOS 上直接生成 
 
 ## 文件
 
-- `app.py`：Flask 后端和 DFT 水印嵌入逻辑
+- `app.py`：Flask 后端和多种水印嵌入逻辑
 - `build_desktop.py`：PyInstaller 桌面打包脚本
 - `templates/index.html`：上传和结果页面
 - `static/styles.css`：页面样式
