@@ -1,6 +1,9 @@
 build/
 dist/
 .pyinstaller-cache/
+.matplotlib-cache/
+.conda/
+.vscode/
 *.spec
 web_outputs/
 __pycache__/
