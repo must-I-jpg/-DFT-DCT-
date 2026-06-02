@@ -35,6 +35,10 @@
         {% endif %}
       </form>
 
+      <form class="shutdown-form" method="post" action="{{ url_for('shutdown') }}">
+        <button class="shutdown" type="submit">退出应用</button>
+      </form>
+
       <section class="panel result-panel">
         {% if result %}
           <div class="result-head">

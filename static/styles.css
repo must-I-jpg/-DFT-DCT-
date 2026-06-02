@@ -43,9 +43,29 @@ body {
 }
 
 .controls {
+  grid-column: 1;
+  grid-row: 1;
   position: sticky;
   top: 24px;
   padding: 22px;
+}
+
+.shutdown-form {
+  grid-column: 1;
+  grid-row: 2;
+  text-align: center;
+}
+
+.shutdown {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.shutdown:hover {
+  color: var(--danger);
 }
 
 .field {
@@ -113,6 +133,8 @@ output {
 }
 
 .result-panel {
+  grid-column: 2;
+  grid-row: 1 / span 2;
   min-height: 560px;
   padding: 24px;
 }
@@ -200,7 +222,19 @@ figcaption {
   }
 
   .controls {
+    grid-column: auto;
+    grid-row: auto;
     position: static;
+  }
+
+  .shutdown-form {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .result-panel {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .result-head {

@@ -13,19 +13,23 @@ from __future__ import annotations
 
 import base64
 import io
+import math
+import threading
 import uuid
+import webbrowser
 from pathlib import Path
 
 import numpy as np
 from flask import Flask, render_template, request, send_from_directory
 from PIL import Image
-from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+from werkzeug.serving import BaseWSGIServer, make_server
 
 
 ROOT = Path(__file__).resolve().parent
-OUTPUT_DIR = ROOT / "web_outputs"
+OUTPUT_DIR = Path.home() / ".frequency_watermark" / "web_outputs"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "bmp", "webp"}
 DEFAULT_ALPHA = 0.05
+SERVER: BaseWSGIServer | None = None
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
@@ -127,10 +131,24 @@ def image_data_uri(image: np.ndarray | Image.Image) -> str:
 
 
 def quality_metrics(cover: np.ndarray, watermarked: np.ndarray) -> tuple[float, float]:
-    cover_u8 = to_uint8(cover)
-    watermarked_u8 = to_uint8(watermarked)
-    psnr_value = float(peak_signal_noise_ratio(cover_u8, watermarked_u8, data_range=255))
-    ssim_value = float(structural_similarity(cover_u8, watermarked_u8, channel_axis=2, data_range=255))
+    mse = float(np.mean((cover - watermarked) ** 2))
+    psnr_value = math.inf if mse == 0 else 10 * math.log10(1 / mse)
+
+    # Global SSIM is sufficient for the UI quality summary and keeps the desktop
+    # package independent from the much larger scikit-image distribution.
+    means_cover = np.mean(cover, axis=(0, 1))
+    means_watermarked = np.mean(watermarked, axis=(0, 1))
+    centered_cover = cover - means_cover
+    centered_watermarked = watermarked - means_watermarked
+    variance_cover = np.mean(centered_cover**2, axis=(0, 1))
+    variance_watermarked = np.mean(centered_watermarked**2, axis=(0, 1))
+    covariance = np.mean(centered_cover * centered_watermarked, axis=(0, 1))
+    c1, c2 = 0.01**2, 0.03**2
+    channel_ssim = (
+        (2 * means_cover * means_watermarked + c1) * (2 * covariance + c2)
+        / ((means_cover**2 + means_watermarked**2 + c1) * (variance_cover + variance_watermarked + c2))
+    )
+    ssim_value = float(np.mean(channel_ssim))
     return psnr_value, ssim_value
 
 
@@ -183,6 +201,26 @@ def download(filename: str):
     return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
 
 
+@app.post("/shutdown")
+def shutdown():
+    if SERVER is not None:
+        threading.Thread(target=SERVER.shutdown, daemon=True).start()
+    return "应用已退出，可以关闭此页面。"
+
+
+def open_browser(url: str) -> None:
+    webbrowser.open(url, new=1)
+
+
+def run_desktop_app() -> None:
+    global SERVER
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    SERVER = make_server("127.0.0.1", 0, app)
+    url = f"http://127.0.0.1:{SERVER.server_port}"
+    print(f"Open {url}", flush=True)
+    threading.Timer(0.5, open_browser, args=(url,)).start()
+    SERVER.serve_forever()
+
+
 if __name__ == "__main__":
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    run_desktop_app()
