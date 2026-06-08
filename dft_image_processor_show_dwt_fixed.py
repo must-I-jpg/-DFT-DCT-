@@ -25,6 +25,7 @@ import cv2
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Rectangle
 from matplotlib import font_manager
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
@@ -207,6 +208,45 @@ def save_frequency_diff(f_before, f_after):
     plt.colorbar(label="频谱差异（对数）")
     plt.title("DFT 频谱嵌入前后差异")
     plt.savefig(ROOT / "frequency_diff.png", dpi=DPI, bbox_inches="tight")
+    plt.close()
+
+
+def add_embed_boxes(ax, pos, wm_shape):
+    y, x, sy, sx = pos
+    wh, ww = wm_shape
+    for label, px, py in [("main", x, y), ("sym", sx, sy)]:
+        ax.add_patch(Rectangle((px, py), ww, wh, fill=False, edgecolor="cyan", linewidth=1.5))
+        ax.text(px, py - 3, label, color="cyan", fontsize=7, weight="bold", va="bottom")
+
+
+def save_frequency_comparison(f_before, f_after, pos, wm_shape):
+    channel_names = ["B", "G", "R"]
+    fig, axes = plt.subplots(3, 3, figsize=(18, 16))
+    fig.suptitle("DFT 水印嵌入前后频域图像对比", fontsize=16)
+
+    for row, name in enumerate(channel_names):
+        before = np.log1p(np.abs(f_before[row]))
+        after = np.log1p(np.abs(f_after[row]))
+        diff = np.abs(after - before)
+        spectrum_vmax = max(float(before.max()), float(after.max()))
+        diff_vmax = max(float(diff.max()), 1e-12)
+
+        items = [
+            (before, f"{name} 通道：DFT 嵌入前幅度谱", "gray", 0.0, spectrum_vmax),
+            (after, f"{name} 通道：DFT 嵌入后幅度谱", "gray", 0.0, spectrum_vmax),
+            (diff, f"{name} 通道：频域变化差异", "hot", 0.0, diff_vmax),
+        ]
+
+        for col, (img, title, cmap, vmin, vmax) in enumerate(items):
+            ax = axes[row, col]
+            im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax)
+            add_embed_boxes(ax, pos, wm_shape)
+            ax.set_title(title)
+            ax.axis("off")
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    plt.savefig(ROOT / "frequency_comparison.png", dpi=DPI, bbox_inches="tight")
     plt.close()
 
 
@@ -510,6 +550,7 @@ def main():
 
     save_basic_result(cover, watermarked_dft, wm_bin, extracted_dft, dft_metrics)
     save_frequency_diff(f_before[0], f_after[0])
+    save_frequency_comparison(f_before, f_after, pos, wm_bin.shape)
     alpha_scan(cover, wm_bin, wm_pm1, pos)
     robustness = robustness_tests(cover, watermarked_dft, wm_bin, pos)
     save_robustness_summary(robustness)
@@ -517,7 +558,7 @@ def main():
     print_report(metrics, wm_bin.shape)
 
     print("\n输出文件：")
-    for name in ["basic_dft_result.png", "frequency_diff.png", "alpha_scan.png", "robustness_summary.png", "method_comparison.png"]:
+    for name in ["basic_dft_result.png", "frequency_diff.png", "frequency_comparison.png", "alpha_scan.png", "robustness_summary.png", "method_comparison.png"]:
         print(" -", ROOT / name)
 
 

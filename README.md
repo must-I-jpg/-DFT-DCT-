@@ -19,6 +19,7 @@
 ### 实验脚本
 
 - DFT 非盲水印嵌入与提取。
+- 生成 B、G、R 三通道的 DFT 嵌入前后幅度谱和频域差异图。
 - 扫描不同 `alpha` 对 PSNR、SSIM 和 NC 的影响。
 - 测试 JPEG 压缩、缩放和高斯噪声攻击下的鲁棒性。
 - 对比 DFT 非盲、DCT QIM、DWT 和 DFT 盲 QIM 方法。
@@ -191,6 +192,7 @@ if method == "new_method":
 | --- | --- |
 | `basic_dft_result.png` | DFT 非盲水印的嵌入、差异放大和提取结果 |
 | `frequency_diff.png` | 水印嵌入前后的频谱差异 |
+| `frequency_comparison.png` | B、G、R 三通道的 DFT 嵌入前幅度谱、嵌入后幅度谱和频域变化差异 |
 | `alpha_scan.png` | 不同 `alpha` 下 PSNR、SSIM 和 NC 的变化 |
 | `robustness_summary.png` | JPEG、缩放和高斯噪声攻击下的鲁棒性 |
 | `method_comparison.png` | DFT 非盲、DCT QIM、DWT 和 DFT 盲 QIM 综合对比 |
@@ -198,6 +200,10 @@ if method == "new_method":
 ### DFT 基础结果
 
 ![DFT 基础结果](basic_dft_result.png)
+
+### DFT 频谱对比
+
+![DFT 频谱对比](frequency_comparison.png)
 
 ### 方法对比
 
