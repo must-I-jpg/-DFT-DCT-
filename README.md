@@ -195,7 +195,8 @@ if method == "new_method":
 | `frequency_comparison.png` | B、G、R 三通道的 DFT 嵌入前幅度谱、嵌入后幅度谱和频域变化差异 |
 | `alpha_scan.png` | 不同 `alpha` 下 PSNR、SSIM 和 NC 的变化 |
 | `robustness_summary.png` | JPEG、缩放和高斯噪声攻击下的鲁棒性 |
-| `method_comparison.png` | DFT 非盲、DCT QIM、DWT 和 DFT 盲 QIM 综合对比 |
+| `qim_comparison.png` | DCT QIM 和 DFT 盲 QIM 两种 QIM 量化嵌入方法对比 |
+| `dct_dwt_comparison.png` | DCT QIM 和 DWT 两种变换域方法对比 |
 
 ### DFT 基础结果
 
@@ -205,9 +206,13 @@ if method == "new_method":
 
 ![DFT 频谱对比](frequency_comparison.png)
 
-### 方法对比
+### QIM 方法对比
 
-![水印方法对比](method_comparison.png)
+![QIM 方法对比](qim_comparison.png)
+
+### DCT 与 DWT 对比
+
+![DCT 与 DWT 对比](dct_dwt_comparison.png)
 
 ## 项目结构
 

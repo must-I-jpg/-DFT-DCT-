@@ -320,12 +320,17 @@ def robustness_tests(cover, watermarked, wm_bin, pos):
 def save_robustness_summary(results):
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     colors = ["steelblue", "coral", "seagreen"]
+    xlabels = {
+        "JPEG 压缩": "JPEG 质量因子 Q（越低压缩越强）",
+        "缩放": "缩放比例 s（先缩放到 s 倍，再恢复原尺寸）",
+        "高斯噪声": "噪声标准差 sigma（像素值 0-255）",
+    }
     for ax, (name, rows), color in zip(axes, results.items(), colors):
         labels = [str(r[0]) for r in rows]
         ncs = [r[1] for r in rows]
         ax.bar(range(len(labels)), ncs, tick_label=labels, color=color)
         ax.set_title(name + "鲁棒性")
-        ax.set_xlabel("攻击强度")
+        ax.set_xlabel(xlabels[name])
         ax.set_ylabel("NC")
         ax.set_ylim(0, 1.05)
         ax.grid(axis="y", alpha=0.3)
@@ -459,6 +464,63 @@ def blind_dft_experiment(cover, wm_bin, pos):
     return cv2.cvtColor((gray_wm * 255).astype(np.uint8), cv2.COLOR_GRAY2BGR), ext
 
 
+def save_method_group_figure(filename, title, selected_names, cover_u8, wm_bin, method_images, method_ext, metrics):
+    meta = {
+        "DFT 非盲": ("DFT", "加性嵌入", "非盲"),
+        "DCT QIM": ("DCT", "QIM 量化", "盲"),
+        "DWT": ("DWT", "加性嵌入", "非盲"),
+        "DFT 盲 QIM": ("DFT", "QIM 量化", "盲"),
+    }
+    cols = len(selected_names) + 1
+    fig = plt.figure(figsize=(4.8 * cols, 11))
+
+    ax = fig.add_subplot(3, cols, 1)
+    ax.imshow(cv2.cvtColor(cover_u8, cv2.COLOR_BGR2RGB))
+    ax.set_title("原始载体")
+    ax.axis("off")
+
+    for i, name in enumerate(selected_names, start=2):
+        p, _, _ = metrics[name]
+        ax = fig.add_subplot(3, cols, i)
+        ax.imshow(cv2.cvtColor(method_images[name], cv2.COLOR_BGR2RGB))
+        ax.set_title(f"{name}\nPSNR={p:.1f}")
+        ax.axis("off")
+
+    ax = fig.add_subplot(3, cols, cols + 1)
+    ax.imshow(wm_bin, cmap="gray", vmin=0, vmax=255)
+    ax.set_title("原始水印")
+    ax.axis("off")
+
+    for i, name in enumerate(selected_names, start=cols + 2):
+        _, _, n = metrics[name]
+        ax = fig.add_subplot(3, cols, i)
+        ax.imshow(method_ext[name], cmap="gray", vmin=0, vmax=255)
+        ax.set_title(f"{name}\nNC={n:.3f}")
+        ax.axis("off")
+
+    table_ax = fig.add_subplot(3, cols, (2 * cols + 1, 3 * cols))
+    table_ax.axis("off")
+    rows = []
+    for name in selected_names:
+        p, s, n = metrics[name]
+        domain, embedding, extraction = meta[name]
+        rows.append([name, domain, embedding, extraction, f"{p:.2f}", f"{s:.4f}", f"{n:.4f}"])
+    table = table_ax.table(
+        cellText=rows,
+        colLabels=["方法", "变换域", "嵌入方式", "提取方式", "PSNR(dB)", "SSIM", "NC"],
+        cellLoc="center",
+        loc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 2)
+    table_ax.set_title(title)
+
+    plt.tight_layout()
+    plt.savefig(ROOT / filename, dpi=DPI, bbox_inches="tight")
+    plt.close()
+
+
 def compare_methods(cover, wm_bin, wm_pm1, pos, dft_wm, dft_ext, dft_metrics):
     cover_u8 = (cover * 255).astype(np.uint8)
     gray_cover = cv2.cvtColor(cover_u8, cv2.COLOR_BGR2GRAY)
@@ -478,43 +540,26 @@ def compare_methods(cover, wm_bin, wm_pm1, pos, dft_wm, dft_ext, dft_metrics):
         method_ext[name] = ext
         metrics[name] = (float(psnr(gray_cover, gray)), float(ssim(gray_cover, gray)), normalized_correlation(wm_bin, ext))
 
-    fig = plt.figure(figsize=(24, 14))
-    names = list(method_images)
-    ax = fig.add_subplot(3, 5, 1)
-    ax.imshow(cv2.cvtColor(cover_u8, cv2.COLOR_BGR2RGB))
-    ax.set_title("原始载体")
-    ax.axis("off")
-
-    for i, name in enumerate(names, start=2):
-        p, _, _ = metrics[name]
-        ax = fig.add_subplot(3, 5, i)
-        ax.imshow(cv2.cvtColor(method_images[name], cv2.COLOR_BGR2RGB))
-        ax.set_title(f"{name}\nPSNR={p:.1f}")
-        ax.axis("off")
-
-    ax = fig.add_subplot(3, 5, 6)
-    ax.imshow(wm_bin, cmap="gray", vmin=0, vmax=255)
-    ax.set_title("原始水印")
-    ax.axis("off")
-    for i, name in enumerate(names, start=7):
-        _, _, n = metrics[name]
-        ax = fig.add_subplot(3, 5, i)
-        ax.imshow(method_ext[name], cmap="gray", vmin=0, vmax=255)
-        ax.set_title(f"{name}\nNC={n:.3f}")
-        ax.axis("off")
-
-    table_ax = fig.add_subplot(3, 5, (11, 15))
-    table_ax.axis("off")
-    rows = [[name, f"{m[0]:.2f}", f"{m[1]:.4f}", f"{m[2]:.4f}"] for name, m in metrics.items()]
-    table = table_ax.table(cellText=rows, colLabels=["方法", "PSNR(dB)", "SSIM", "NC"], cellLoc="center", loc="center")
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-    table.scale(1, 2)
-    table_ax.set_title("综合对比")
-
-    plt.tight_layout()
-    plt.savefig(ROOT / "method_comparison.png", dpi=DPI, bbox_inches="tight")
-    plt.close()
+    save_method_group_figure(
+        "qim_comparison.png",
+        "QIM 量化嵌入方法对比",
+        ["DCT QIM", "DFT 盲 QIM"],
+        cover_u8,
+        wm_bin,
+        method_images,
+        method_ext,
+        metrics,
+    )
+    save_method_group_figure(
+        "dct_dwt_comparison.png",
+        "DCT 与 DWT 变换域方法对比",
+        ["DCT QIM", "DWT"],
+        cover_u8,
+        wm_bin,
+        method_images,
+        method_ext,
+        metrics,
+    )
     return metrics
 
 
@@ -558,7 +603,15 @@ def main():
     print_report(metrics, wm_bin.shape)
 
     print("\n输出文件：")
-    for name in ["basic_dft_result.png", "frequency_diff.png", "frequency_comparison.png", "alpha_scan.png", "robustness_summary.png", "method_comparison.png"]:
+    for name in [
+        "basic_dft_result.png",
+        "frequency_diff.png",
+        "frequency_comparison.png",
+        "alpha_scan.png",
+        "robustness_summary.png",
+        "qim_comparison.png",
+        "dct_dwt_comparison.png",
+    ]:
         print(" -", ROOT / name)
 
 
